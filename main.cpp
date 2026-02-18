@@ -22,6 +22,8 @@ public:
 private:
   GLFWwindow* window;
 
+  VkInstance instance;
+
   // Create GLFW Window
   void initWindow() {
     // Initialize GLFW
@@ -35,7 +37,43 @@ private:
     window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
   }
   void initVulkan() {
+    createInstance();
+  }
 
+  // ######## USED IN initVulkan ########
+  void createInstance() {
+    // Fillout App Info
+    VkApplicationInfo appInfo{};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; // sType
+    appInfo.pApplicationName = "Hello Triangle"; // Name of Application
+    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0); // Version count of Application
+    appInfo.pEngineName = "No Engine"; // Engine Name of Application
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0); // Engine Version
+    appInfo.apiVersion = VK_API_VERSION_1_0; // Version of Vulkan API being used
+
+    // Fillout Creation Info for VkInstance
+    VkInstanceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; // sType
+    createInfo.pApplicationInfo = &appInfo; // Application Info | from appInfo
+
+    // Count gotten later
+    uint32_t glfwExtensionCount = 0;
+    // Holds GLFW Extensions to be used in program
+    const char** glfwExtensions;
+    // Function returns Extensions to glfwExtensions and sets the extension count
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    // Create Info for extensions filled out
+    createInfo.enabledExtensionCount = glfwExtensionCount;
+    createInfo.ppEnabledExtensionNames = glfwExtensions;
+
+    // Used to determine global validation layers, will be used later, blank now
+    createInfo.enabledLayerCount = 0;
+
+    // Call creation function, throwing error if not successful
+    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
+      throw std::runtime_error("failed to create instance!");
+    }
   }
 
   void mainLoop() {
