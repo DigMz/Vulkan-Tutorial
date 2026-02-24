@@ -72,7 +72,9 @@ private:
 
   VkInstance instance; // instance of Vulkan
   VkDebugUtilsMessengerEXT debugMessenger; // Vulkan debugMessenger
-  VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+  VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // Holds reference to physical device
+  VkDevice device; // Holds logical device handle
+  VkQueue graphicsQueue; // handle for graphics queue
 
   // Create GLFW Window
   void initWindow() {
@@ -92,6 +94,7 @@ private:
     createInstance();
     setupDebugMessenger();
     pickPhysicalDevice();
+    createLogicalDevice();
   }
 
   void mainLoop() {
@@ -102,6 +105,9 @@ private:
   }
 
   void cleanup() {
+    // Destroy logical device
+    vkDestroyDevice(device, nullptr);
+
     // If validationLayers are on, destory the debugMessenger
     if (enableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
@@ -215,6 +221,48 @@ private:
     } else {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
+  }
+
+  void createLogicalDevice() {
+    // Used in queueFamilyIndex when making device queue
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+    // Fill creation info for device queue
+    VkDeviceQueueCreateInfo queueCreateInfo{};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+    queueCreateInfo.queueCount = 1;
+
+    // Set queue priority (first)
+    float queuePriority = 1.0f;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
+
+    // Specify device features to be used, set to VK_FALSE for now
+    VkPhysicalDeviceFeatures deviceFeatures{};
+
+    // Fill in creation infor for device
+    VkDeviceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+    createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.enabledExtensionCount = 0;
+
+    // Add layercount and validation layer data if enabled
+    if (enableValidationLayers) {
+      createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+      createInfo.ppEnabledLayerNames = validationLayers.data();
+    } else {
+      createInfo.enabledLayerCount = 0;
+    }
+
+    // Create device
+    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
+      throw std::runtime_error("failed to create logical device!");
+    }
+
+    // Handle to get device queue
+    vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
   }
 
   int rateDeviceSuitability(VkPhysicalDevice device) {
