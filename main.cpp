@@ -1,3 +1,4 @@
+#include <cstdint>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -11,6 +12,7 @@
 #include <cstdlib>
 #include <map>
 #include <optional>
+#include <set>
 
 // Window WIDTH and HEIGHT
 const uint32_t WIDTH = 800;
@@ -50,9 +52,10 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 // Helper struct to manage graphicsFamily indices
 struct QueueFamilyIndices {
   std::optional<uint32_t> graphicsFamily;
+  std::optional<uint32_t> presentFamily;
 
   bool isComplete() {
-    return graphicsFamily.has_value();
+    return graphicsFamily.has_value() && presentFamily.has_value();
   }
 };
 
@@ -72,9 +75,13 @@ private:
 
   VkInstance instance; // instance of Vulkan
   VkDebugUtilsMessengerEXT debugMessenger; // Vulkan debugMessenger
+  VkSurfaceKHR surface; // Vulkan surface
+
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // Holds reference to physical device
   VkDevice device; // Holds logical device handle
+
   VkQueue graphicsQueue; // handle for graphics queue
+  VkQueue presentQueue; // handle for present queue
 
   // Create GLFW Window
   void initWindow() {
@@ -93,6 +100,7 @@ private:
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
+    createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
   }
@@ -113,6 +121,9 @@ private:
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
 
+    // Destroy the Vulkan Surface
+    vkDestroySurfaceKHR(instance, surface, nullptr);
+
     // Destroy the Vulkan Instance
     vkDestroyInstance(instance, nullptr);
 
@@ -123,7 +134,6 @@ private:
     glfwTerminate();
   }
 
-  // ######## USED IN initVulkan ########
   void createInstance() {
     // Checks if validation layer is available when used, throwing error if not present
     if (enableValidationLayers && !checkValidationLayerSupport()) {
@@ -195,6 +205,12 @@ private:
     }
   }
 
+  void createSurface() {
+    if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create window surface!");
+    }
+  }
+
   void pickPhysicalDevice() {
     uint32_t deviceCount = 0;
     // Get device count with Vulkan API
@@ -227,15 +243,22 @@ private:
     // Used in queueFamilyIndex when making device queue
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
-    // Fill creation info for device queue
-    VkDeviceQueueCreateInfo queueCreateInfo{};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-    queueCreateInfo.queueCount = 1;
+    // List createInfos for both graphics and present family
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+    std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
     // Set queue priority (first)
     float queuePriority = 1.0f;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
+
+    // Fill createInfos for graphics and present family
+    for (uint32_t queueFamily : uniqueQueueFamilies) {
+      VkDeviceQueueCreateInfo queueCreateInfo{};
+      queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+      queueCreateInfo.queueFamilyIndex = queueFamily;
+      queueCreateInfo.queueCount = 1;
+      queueCreateInfo.pQueuePriorities = &queuePriority;
+      queueCreateInfos.push_back(queueCreateInfo);
+    }
 
     // Specify device features to be used, set to VK_FALSE for now
     VkPhysicalDeviceFeatures deviceFeatures{};
@@ -243,7 +266,8 @@ private:
     // Fill in creation infor for device
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
     createInfo.queueCreateInfoCount = 1;
     createInfo.pEnabledFeatures = &deviceFeatures;
     createInfo.enabledExtensionCount = 0;
@@ -261,8 +285,10 @@ private:
       throw std::runtime_error("failed to create logical device!");
     }
 
-    // Handle to get device queue
+    // Fill handle to get graphicsQueue
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+    // Fill handle for presentQueue
+    vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
   }
 
   int rateDeviceSuitability(VkPhysicalDevice device) {
@@ -314,6 +340,14 @@ private:
       // Bit manipulation for queueFlag check
       if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
         indices.graphicsFamily = i;
+
+        // Get presentSupport from device
+        VkBool32 presentSupport = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+        if (presentSupport) {
+          indices.presentFamily = i;
+        }
+
         if (indices.isComplete()) {
           break;
         }
@@ -323,8 +357,6 @@ private:
 
     return indices;
   }
-
-  // ########## USED IN createInstance ##########
 
   // Gets list of required extensions, adding debug utils if 
   //  validation layers are enabled
@@ -373,9 +405,6 @@ private:
 
     return true;
   }
-
-  // ######### createInstance FUNCTIONS END ##########
-  // ######### initVulkan     FUNCTIONS END ##########
   
   // Callback for debug messages
   static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
