@@ -98,8 +98,9 @@ private:
 
   VkSwapchainKHR swapChain; // Holds swap chain handle
   std::vector<VkImage> swapChainImages; // Holds swap chain images
-  VkFormat swapChainImageFormat;
-  VkExtent2D swapChainExtent;
+  VkFormat swapChainImageFormat; // Format of swapchain Images
+  VkExtent2D swapChainExtent; // Size details for swapchain images
+  std::vector<VkImageView> swapChainImageViews; // Stores image views
 
   // Create GLFW Window
   void initWindow() {
@@ -122,6 +123,7 @@ private:
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
+    createImageViews();
   }
 
   void mainLoop() {
@@ -132,6 +134,12 @@ private:
   }
 
   void cleanup() {
+    // Destroy imageViews
+    for (auto imageView : swapChainImageViews) {
+      vkDestroyImageView(device, imageView, nullptr);
+    }
+
+    // Destroy Swapchain
     vkDestroySwapchainKHR(device, swapChain, nullptr);
 
     // Destroy logical device
@@ -369,6 +377,36 @@ private:
 
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
+  }
+
+  void createImageViews() {
+    swapChainImageViews.resize(swapChainImages.size());
+    
+    for (size_t i = 0; i < swapChainImages.size(); i++) {
+      VkImageViewCreateInfo createInfo{};
+      createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+      createInfo.image = swapChainImages[i];
+      // How swapchain Images should be interpreted
+      createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+      createInfo.format = swapChainImageFormat;
+      // Color channel swizzling
+      createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+      createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+      createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+      createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+      // Describes image purpose and what should be accessed
+      createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      createInfo.subresourceRange.baseMipLevel = 0;
+      createInfo.subresourceRange.levelCount = 1;
+      createInfo.subresourceRange.baseArrayLayer = 0;
+      createInfo.subresourceRange.layerCount = 1;
+
+      // Create imageview and put it in imageview vector
+      if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create image views!");
+      }
+
+    }
   }
 
   VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
