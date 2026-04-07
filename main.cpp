@@ -107,6 +107,8 @@ private:
   VkPipelineLayout pipelineLayout;
   VkPipeline graphicsPipeline;
 
+  std::vector<VkFramebuffer> swapChainFramebuffers;
+
   // Create GLFW Window
   void initWindow() {
     // Initialize GLFW
@@ -131,6 +133,7 @@ private:
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
+    createFrameBuffers();
   }
 
   void mainLoop() {
@@ -141,6 +144,11 @@ private:
   }
 
   void cleanup() {
+    // Destroy Framebuffers
+    for (auto framebuffer : swapChainFramebuffers) {
+      vkDestroyFramebuffer(device, framebuffer, nullptr);
+    }
+
     // Destroy graphicsPipeline
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
     // Destroy pipelineLayout
@@ -159,7 +167,7 @@ private:
     // Destroy logical device
     vkDestroyDevice(device, nullptr);
 
-    // If validationLayers are on, destory the debugMessenger
+    // If validationLayers are on, destroy the debugMessenger
     if (enableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
@@ -605,6 +613,33 @@ private:
     // Destroy shader modules
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
+  }
+
+  void createFrameBuffers() {
+    // Resize vector for framebuffer count
+    swapChainFramebuffers.resize(swapChainImageViews.size());
+    // Create framebuffers
+    for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+      // Create list of attachments from swapChainImageViews
+      VkImageView attachments[] = {
+        swapChainImageViews[i]
+      };
+
+      // Creation info for framebuffer
+      VkFramebufferCreateInfo framebufferInfo{};
+      framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+      framebufferInfo.renderPass = renderPass;
+      framebufferInfo.attachmentCount = 1;
+      framebufferInfo.pAttachments = attachments;
+      framebufferInfo.width = swapChainExtent.width;
+      framebufferInfo.height = swapChainExtent.height;
+      framebufferInfo.layers = 1;
+
+      if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create framebuffer!");
+      }
+    }
+
   }
 
   // Take SPIR-V Binary buffer to make shader module
