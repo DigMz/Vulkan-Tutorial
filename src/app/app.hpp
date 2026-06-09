@@ -57,6 +57,10 @@ private:
   vk::raii::CommandPool            commandPool      = nullptr;
   vk::raii::CommandBuffer          commandBuffer    = nullptr;
 
+  vk::raii::Semaphore              presentCompleteSemaphore = nullptr;
+  vk::raii::Semaphore              renderFinishedSemaphore  = nullptr;
+  vk::raii::Fence                  drawFence                = nullptr;
+
   std::vector<const char *> requiredDeviceExtension = {
     vk::KHRSwapchainExtensionName
   };
@@ -72,7 +76,6 @@ private:
   };
 
 	void initWindow();
-
 
 	void initVulkan();
   void createInstance();
@@ -97,6 +100,7 @@ private:
     vk::PipelineStageFlags2 dst_stage_mask
   );
 
+  void createSyncObjects();
   void drawFrame();
 
   [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const {

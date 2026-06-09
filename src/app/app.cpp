@@ -53,6 +53,7 @@ void Application::initVulkan() {
   createGraphicsPipeline();
   createCommandPool();
   createCommandBuffer();
+  createSyncObjects();
 }
 
 void Application::createInstance() {
@@ -165,6 +166,7 @@ void Application::pickPhysicalDevice() {
                                                              vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
     bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
                                     features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+                                    features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
                                     features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
     // Application can't function without geometry shaders
@@ -220,7 +222,7 @@ void Application::createLogicalDevice() {
     featureChain = {
       {},                                    // vk::PhysicalDeviceFeatures2 (empty for now)
       {.shaderDrawParameters = true},        // Enable shader draw parameters from Vulkan 1.1
-      {.dynamicRendering     = true},        // Enable dynamic rendering from Vulkan 1.3
+      {.synchronization2 = true, .dynamicRendering     = true},        // Enable dynamic rendering from Vulkan 1.3
       {.extendedDynamicState = true}         // Enable extended dynamic state from the extension
   };
 
@@ -265,7 +267,7 @@ void Application::createSwapChain() {
     .imageSharingMode = vk::SharingMode::eExclusive,
     .preTransform     = surfaceCapabilities.currentTransform,
     .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-    .presentMode      = chooseSwapPresentMode(availablePresentModes),
+    .presentMode      = presentMode,
     .clipped          = true,
   };
 
@@ -487,6 +489,47 @@ void Application::transition_image_layout(
   commandBuffer.pipelineBarrier2(dependencyInfo);
 }
 
+void Application::createSyncObjects() {
+  presentCompleteSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+  renderFinishedSemaphore  = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+  drawFence                = vk::raii::Fence(device, {.flags = vk::FenceCreateFlagBits::eSignaled});
+}
+
+void Application::drawFrame() {
+  auto fenceResult = device.waitForFences(*drawFence, vk::True, UINT64_MAX);
+  if (fenceResult != vk::Result::eSuccess) {
+    throw std::runtime_error("failed to wait for fence!");
+  }
+  device.resetFences(*drawFence);
+
+  auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphore, nullptr);
+
+  recordCommandBuffer(imageIndex);
+
+  queue.waitIdle(); // NOTE: Will swap out for having multiple frames in flight and sync
+
+  vk::PipelineStageFlags waitDestinationStageMask( vk::PipelineStageFlagBits::eColorAttachmentOutput );
+  const vk::SubmitInfo submitInfo {
+    .waitSemaphoreCount   = 1,
+    .pWaitSemaphores      = &*presentCompleteSemaphore,
+    .pWaitDstStageMask    = &waitDestinationStageMask,
+    .commandBufferCount   = 1,
+    .pCommandBuffers      = &*commandBuffer,
+    .signalSemaphoreCount = 1,
+    .pSignalSemaphores    = &*renderFinishedSemaphore
+  };
+  queue.submit(submitInfo, *drawFence);
+
+  const vk::PresentInfoKHR presentInfoKHR {
+    .waitSemaphoreCount = 1,
+    .pWaitSemaphores    = &*renderFinishedSemaphore,
+    .swapchainCount     = 1,
+    .pSwapchains        = &*swapChain,
+    .pImageIndices      = &imageIndex
+  };
+  result = queue.presentKHR(presentInfoKHR);
+}
+
 uint32_t Application::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const &surfaceCapabilities) {
   auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
   if ((0 < surfaceCapabilities.maxImageCount) && (surfaceCapabilities.maxImageCount < minImageCount)) {
@@ -498,7 +541,7 @@ uint32_t Application::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const &
 vk::SurfaceFormatKHR Application::chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const &availableFormats) {
   assert(!availableFormats.empty());
   const auto formatIt = std::ranges::find_if(availableFormats, [](const auto &format) {
-    return format.format == vk::Format::eB8G8R8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+    return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
   });
   return formatIt != availableFormats.end() ? *formatIt : availableFormats[0];
 }
@@ -550,13 +593,31 @@ void Application::setupDebugMessenger() {
 }
 
 void Application::mainLoop() {
-  while (!glfwWindowShouldClose(window))
-	{
+  while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+    drawFrame();
 	}
+
+  device.waitIdle();
 }
 
 void Application::cleanup() {
+  // Explicitly destroy all Vulkan objects before glfwTerminate()
+  // destroys the Wayland display underneath them
+  drawFence.clear();
+  renderFinishedSemaphore.clear();
+  presentCompleteSemaphore.clear();
+  commandBuffer.clear();
+  commandPool.clear();
+  graphicsPipeline.clear();
+  pipelineLayout.clear();
+  swapChainImageViews.clear();
+  swapChain.clear();
+  device.clear();
+  surface.clear();
+  debugMessenger.clear();
+  instance.clear();
+
   glfwDestroyWindow(window);
 
 	glfwTerminate();
