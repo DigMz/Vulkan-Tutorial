@@ -38,16 +38,16 @@ public:
 	void run();
 
 private:
-	GLFWwindow                           *window          = nullptr;
+	GLFWwindow                           *window        = nullptr;
   vk::raii::Context                    context;
-  vk::raii::Instance                   instance         = nullptr;
-  vk::raii::DebugUtilsMessengerEXT     debugMessenger   = nullptr;
-  vk::raii::SurfaceKHR                 surface          = nullptr;
-  vk::raii::PhysicalDevice             physicalDevice   = nullptr;
-  vk::raii::Device                     device           = nullptr;
-  vk::raii::Queue                      queue            = nullptr;
-  uint32_t                             queueIndex       = ~0;
-  vk::raii::SwapchainKHR               swapChain        = nullptr;
+  vk::raii::Instance                   instance       = nullptr;
+  vk::raii::DebugUtilsMessengerEXT     debugMessenger = nullptr;
+  vk::raii::SurfaceKHR                 surface        = nullptr;
+  vk::raii::PhysicalDevice             physicalDevice = nullptr;
+  vk::raii::Device                     device         = nullptr;
+  vk::raii::Queue                      queue          = nullptr;
+  uint32_t                             queueIndex     = ~0;
+  vk::raii::SwapchainKHR               swapChain      = nullptr;
   std::vector<vk::Image>               swapChainImages;
   vk::SurfaceFormatKHR                 swapChainSurfaceFormat;
   vk::Extent2D                         swapChainExtent;
@@ -61,7 +61,8 @@ private:
   std::vector<vk::raii::Semaphore>     presentCompleteSemaphores;
   std::vector<vk::raii::Semaphore>     renderFinishedSemaphores;
   std::vector<vk::raii::Fence>         inFlightFences;
-  uint32_t                             frameIndex = 0;
+  uint32_t                             frameIndex         = 0;
+  bool                                 framebufferResized = false;
 
   std::vector<const char *> requiredDeviceExtension = {
     vk::KHRSwapchainExtensionName
@@ -78,6 +79,11 @@ private:
   };
 
 	void initWindow();
+
+  static void framebufferResizeCallback(GLFWwindow *window, int width, int height) {
+    auto app = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+    app->framebufferResized = true;
+  }
 
 	void initVulkan();
   void createInstance();
@@ -123,4 +129,7 @@ private:
 
 	void mainLoop();
 	void cleanup();
+
+  void cleanupSwapChain();
+  void recreateSwapChain();
 };

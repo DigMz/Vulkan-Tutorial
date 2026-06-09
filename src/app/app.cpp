@@ -25,9 +25,11 @@ void Application::initWindow() {
   glfwInit();
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
 	window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+  glfwSetWindowUserPointer(window, this);
+  glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 }
 
 std::vector<const char*> Application::getRequiredInstanceExtensions() {
@@ -513,14 +515,24 @@ void Application::drawFrame() {
   if (fenceResult != vk::Result::eSuccess) {
     throw std::runtime_error("failed to wait for fence!");
   }
-  device.resetFences(*inFlightFences[frameIndex]);
 
   auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
 
+  if (result == vk::Result::eErrorOutOfDateKHR) {
+    recreateSwapChain();
+    return;
+  }
+
+  if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+    assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
+    throw std::runtime_error("failed to aquire swap chain image!");
+  }
+
+  // Only reset the fence if we are submitting work
+  device.resetFences(*inFlightFences[frameIndex]);
+
   commandBuffers[frameIndex].reset();
   recordCommandBuffer(imageIndex);
-
-  queue.waitIdle(); // NOTE: Will swap out for having multiple frames in flight and sync
 
   vk::PipelineStageFlags waitDestinationStageMask( vk::PipelineStageFlagBits::eColorAttachmentOutput );
   const vk::SubmitInfo submitInfo {
@@ -542,6 +554,13 @@ void Application::drawFrame() {
     .pImageIndices      = &imageIndex
   };
   result = queue.presentKHR(presentInfoKHR);
+  if ((result == vk::Result::eSuboptimalKHR) || (result == vk::Result::eErrorOutOfDateKHR || framebufferResized)) {
+    framebufferResized = false;
+    recreateSwapChain();
+  } else {
+    // There are no other success codes other then eSuccess; on any error code, presentKHR already threw an exception
+    assert(result == vk::Result::eSuccess);
+  }
 
   frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
 }
@@ -635,6 +654,26 @@ void Application::cleanup() {
   instance.clear();
 
   glfwDestroyWindow(window);
-
 	glfwTerminate();
+}
+
+void Application::cleanupSwapChain() {
+  swapChainImageViews.clear();
+  swapChain = nullptr;
+}
+
+void Application::recreateSwapChain() {
+  int width = 0, height = 0;
+  glfwGetFramebufferSize(window, &width, &height);
+  while (width == 0 || height == 0) {
+    glfwGetFramebufferSize(window, &width, &height);
+    glfwWaitEvents();
+  }
+
+  device.waitIdle();
+
+  cleanupSwapChain();
+
+  createSwapChain();
+  createImageViews();
 }
