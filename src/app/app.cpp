@@ -52,7 +52,7 @@ void Application::initVulkan() {
   createImageViews();
   createGraphicsPipeline();
   createCommandPool();
-  createCommandBuffer();
+  createCommandBuffers();
   createSyncObjects();
 }
 
@@ -81,7 +81,7 @@ void Application::createInstance() {
         });
     });
   if (unsupportedLayerIt != requiredLayers.end()) {
-    throw std::runtime_error("Required layer not supported: " + std::string("unsupportedLayerIt"));
+    throw std::runtime_error("Required layer not supported: " + std::string("*unsupportedLayerIt"));
   }
 
   // Get the required extensions
@@ -388,16 +388,18 @@ void Application::createCommandPool() {
   commandPool = vk::raii::CommandPool(device, poolInfo);
 }
 
-void Application::createCommandBuffer() {
+void Application::createCommandBuffers() {
   vk::CommandBufferAllocateInfo allocInfo {
     .commandPool = commandPool,
     .level = vk::CommandBufferLevel::ePrimary,
-    .commandBufferCount = 1
+    .commandBufferCount = MAX_FRAMES_IN_FLIGHT
   };
-  commandBuffer = std::move(vk::raii::CommandBuffers(device, allocInfo).front());
+  commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
 }
 
 void Application::recordCommandBuffer(uint32_t imageIndex) {
+  auto &commandBuffer = commandBuffers[frameIndex];
+
   commandBuffer.begin({});
 
   // Before strating render, transition the swapchain image to vk::ImageLayout::eColorAttachmentOptimal
@@ -486,24 +488,36 @@ void Application::transition_image_layout(
 		.imageMemoryBarrierCount = 1,
 		.pImageMemoryBarriers    = &barrier
   };
-  commandBuffer.pipelineBarrier2(dependencyInfo);
+  commandBuffers[frameIndex].pipelineBarrier2(dependencyInfo);
 }
 
 void Application::createSyncObjects() {
-  presentCompleteSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
-  renderFinishedSemaphore  = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
-  drawFence                = vk::raii::Fence(device, {.flags = vk::FenceCreateFlagBits::eSignaled});
+  assert(
+    presentCompleteSemaphores.empty() &&
+    renderFinishedSemaphores.empty()  &&
+    inFlightFences.empty()
+  );
+
+  for (size_t i = 0; i < swapChainImages.size(); i++) {
+    renderFinishedSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
+  }
+
+  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    presentCompleteSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
+    inFlightFences.emplace_back(device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
+  }
 }
 
 void Application::drawFrame() {
-  auto fenceResult = device.waitForFences(*drawFence, vk::True, UINT64_MAX);
+  auto fenceResult = device.waitForFences(*inFlightFences[frameIndex], vk::True, UINT64_MAX);
   if (fenceResult != vk::Result::eSuccess) {
     throw std::runtime_error("failed to wait for fence!");
   }
-  device.resetFences(*drawFence);
+  device.resetFences(*inFlightFences[frameIndex]);
 
-  auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphore, nullptr);
+  auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
 
+  commandBuffers[frameIndex].reset();
   recordCommandBuffer(imageIndex);
 
   queue.waitIdle(); // NOTE: Will swap out for having multiple frames in flight and sync
@@ -511,23 +525,25 @@ void Application::drawFrame() {
   vk::PipelineStageFlags waitDestinationStageMask( vk::PipelineStageFlagBits::eColorAttachmentOutput );
   const vk::SubmitInfo submitInfo {
     .waitSemaphoreCount   = 1,
-    .pWaitSemaphores      = &*presentCompleteSemaphore,
+    .pWaitSemaphores      = &*presentCompleteSemaphores[frameIndex],
     .pWaitDstStageMask    = &waitDestinationStageMask,
     .commandBufferCount   = 1,
-    .pCommandBuffers      = &*commandBuffer,
+    .pCommandBuffers      = &*commandBuffers[frameIndex],
     .signalSemaphoreCount = 1,
-    .pSignalSemaphores    = &*renderFinishedSemaphore
+    .pSignalSemaphores    = &*renderFinishedSemaphores[imageIndex]
   };
-  queue.submit(submitInfo, *drawFence);
+  queue.submit(submitInfo, *inFlightFences[frameIndex]);
 
   const vk::PresentInfoKHR presentInfoKHR {
     .waitSemaphoreCount = 1,
-    .pWaitSemaphores    = &*renderFinishedSemaphore,
+    .pWaitSemaphores    = &*renderFinishedSemaphores[imageIndex],
     .swapchainCount     = 1,
     .pSwapchains        = &*swapChain,
     .pImageIndices      = &imageIndex
   };
   result = queue.presentKHR(presentInfoKHR);
+
+  frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 uint32_t Application::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const &surfaceCapabilities) {
@@ -604,10 +620,10 @@ void Application::mainLoop() {
 void Application::cleanup() {
   // Explicitly destroy all Vulkan objects before glfwTerminate()
   // destroys the Wayland display underneath them
-  drawFence.clear();
-  renderFinishedSemaphore.clear();
-  presentCompleteSemaphore.clear();
-  commandBuffer.clear();
+  inFlightFences.clear();
+  renderFinishedSemaphores.clear();
+  presentCompleteSemaphores.clear();
+  commandBuffers.clear();
   commandPool.clear();
   graphicsPipeline.clear();
   pipelineLayout.clear();
