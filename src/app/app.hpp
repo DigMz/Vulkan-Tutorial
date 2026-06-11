@@ -53,11 +53,12 @@ struct Vertex {
 
 const std::vector<Vertex> vertices = {
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{ 0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
-    {{-0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{ 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}}
+    {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
+};
+const std::vector<uint16_t> indices = {
+  0, 1, 2, 2, 3, 0
 };
 
 class Application
@@ -86,6 +87,8 @@ private:
 
   vk::raii::Buffer                     vertexBuffer       = nullptr;
   vk::raii::DeviceMemory               vertexBufferMemory = nullptr;
+  vk::raii::Buffer                     indexBuffer        = nullptr;
+  vk::raii::DeviceMemory               indexBufferMemory  = nullptr;
 
   vk::raii::CommandPool                commandPool      = nullptr;
   std::vector<vk::raii::CommandBuffer> commandBuffers;
@@ -127,7 +130,10 @@ private:
   void createImageViews();
   void createGraphicsPipeline();
   void createCommandPool();
+  std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+  void copyBuffer(vk::raii::Buffer & srcBuffer, vk::raii::Buffer & dstBuffer, vk::DeviceSize size);
   void createVertexBuffer();
+  void createIndexBuffer();
   uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
   void createCommandBuffers();
 
