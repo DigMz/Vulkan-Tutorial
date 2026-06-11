@@ -3,6 +3,7 @@
 #include "utils/utils.hpp"
 #include <GLFW/glfw3.h>
 #include <cassert>
+#include <cstring>
 #include <limits>
 #include <map>
 #include <algorithm>
@@ -54,6 +55,7 @@ void Application::initVulkan() {
   createImageViews();
   createGraphicsPipeline();
   createCommandPool();
+  createVertexBuffer();
   createCommandBuffers();
   createSyncObjects();
 }
@@ -313,7 +315,14 @@ void Application::createGraphicsPipeline() {
   };
   vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-  vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+  auto bindingDescription = Vertex::getBindingDescription();
+  auto attributeDescriptions = Vertex::getAttributeDescriptions();
+  vk::PipelineVertexInputStateCreateInfo vertexInputInfo {
+    .vertexBindingDescriptionCount   = 1,
+    .pVertexBindingDescriptions      = &bindingDescription,
+    .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
+    .pVertexAttributeDescriptions    = attributeDescriptions.data()
+  };
   vk::PipelineInputAssemblyStateCreateInfo inputAssembly { .topology = vk::PrimitiveTopology::eTriangleList };
   vk::PipelineViewportStateCreateInfo viewportState { .viewportCount = 1, .scissorCount = 1 };
 
@@ -390,6 +399,45 @@ void Application::createCommandPool() {
   commandPool = vk::raii::CommandPool(device, poolInfo);
 }
 
+void Application::createVertexBuffer() {
+  vk::BufferCreateInfo bufferInfo {
+    .size        = sizeof(vertices[0]) * vertices.size(),
+    .usage       = vk::BufferUsageFlagBits::eVertexBuffer,
+    .sharingMode = vk::SharingMode::eExclusive,
+  };
+  vertexBuffer = vk::raii::Buffer(device, bufferInfo);
+
+  vk::MemoryRequirements memRequirements = vertexBuffer.getMemoryRequirements();
+  vk::MemoryAllocateInfo memoryAllocateInfo {
+    .allocationSize  = memRequirements.size,
+    .memoryTypeIndex = findMemoryType(
+      memRequirements.memoryTypeBits, 
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    )
+  };
+  vertexBufferMemory = vk::raii::DeviceMemory(device, memoryAllocateInfo);
+
+  vertexBuffer.bindMemory( *vertexBufferMemory, 0 );
+
+  void* data = vertexBufferMemory.mapMemory(0, bufferInfo.size);
+  memcpy(data, vertices.data(), bufferInfo.size);
+  vertexBufferMemory.unmapMemory();
+}
+
+uint32_t Application::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
+  vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
+  for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+    if (
+      (typeFilter & (1 << i)) &&
+      (memProperties.memoryTypes[i].propertyFlags & properties) == properties
+    ) {
+      return i;
+    }
+  }
+
+  throw std::runtime_error("failed to find suitable memory type!");
+}
+
 void Application::createCommandBuffers() {
   vk::CommandBufferAllocateInfo allocInfo {
     .commandPool = commandPool,
@@ -439,8 +487,9 @@ void Application::recordCommandBuffer(uint32_t imageIndex) {
   commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
   commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
   commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
+  commandBuffer.bindVertexBuffers(0, *vertexBuffer, {0});
 
-  commandBuffer.draw(3, 1, 0, 0);
+  commandBuffer.draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
   commandBuffer.endRendering();
 
@@ -554,7 +603,7 @@ void Application::drawFrame() {
     .pImageIndices      = &imageIndex
   };
   result = queue.presentKHR(presentInfoKHR);
-  if ((result == vk::Result::eSuboptimalKHR) || (result == vk::Result::eErrorOutOfDateKHR || framebufferResized)) {
+  if ((result == vk::Result::eSuboptimalKHR) || (result == vk::Result::eErrorOutOfDateKHR) || framebufferResized) {
     framebufferResized = false;
     recreateSwapChain();
   } else {
@@ -644,6 +693,8 @@ void Application::cleanup() {
   presentCompleteSemaphores.clear();
   commandBuffers.clear();
   commandPool.clear();
+  vertexBufferMemory.clear();
+  vertexBuffer.clear();
   graphicsPipeline.clear();
   pipelineLayout.clear();
   swapChainImageViews.clear();

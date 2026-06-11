@@ -1,11 +1,10 @@
 #pragma once
 
 #include "vulkan/vulkan.hpp"
-#include <algorithm>
-#include <cstdlib>
+#include <array>
+#include <cstddef>
 #include <iostream>
-#include <memory>
-#include <stdexcept>
+#include <glm/glm.hpp>
 
 #include <cstdint>
 #include <vector>
@@ -32,6 +31,35 @@ constexpr bool enableValidationLayers = false;
 constexpr bool enableValidationLayers = true;
 #endif // NDEBUG
 
+struct Vertex {
+  glm::vec2 pos;
+  glm::vec3 color;
+
+  static vk::VertexInputBindingDescription getBindingDescription() {
+    return {
+      .binding   = 0,
+      .stride    = sizeof(Vertex),
+      .inputRate = vk::VertexInputRate::eVertex,
+    };
+  }
+
+  static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions() {
+    return {{
+      {.location = 0, .binding = 0, .format = vk::Format::eR32G32Sfloat, .offset = offsetof(Vertex, pos)},
+      {.location = 1, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, color)}
+    }};
+  }
+};
+
+const std::vector<Vertex> vertices = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{ 0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{ 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}}
+};
+
 class Application
 {
 public:
@@ -55,6 +83,10 @@ private:
 
   vk::raii::PipelineLayout             pipelineLayout   = nullptr;
   vk::raii::Pipeline                   graphicsPipeline = nullptr;
+
+  vk::raii::Buffer                     vertexBuffer       = nullptr;
+  vk::raii::DeviceMemory               vertexBufferMemory = nullptr;
+
   vk::raii::CommandPool                commandPool      = nullptr;
   std::vector<vk::raii::CommandBuffer> commandBuffers;
 
@@ -95,6 +127,8 @@ private:
   void createImageViews();
   void createGraphicsPipeline();
   void createCommandPool();
+  void createVertexBuffer();
+  uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
   void createCommandBuffers();
 
   void recordCommandBuffer(uint32_t imageIndex);
