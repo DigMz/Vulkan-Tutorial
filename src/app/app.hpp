@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 
 #include <cstdint>
@@ -51,6 +52,12 @@ struct Vertex {
   }
 };
 
+struct UniformBufferObject {
+  alignas(16) glm::mat4 model;
+  alignas(16) glm::mat4 view;
+  alignas(16) glm::mat4 proj;
+};
+
 const std::vector<Vertex> vertices = {
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
@@ -82,13 +89,21 @@ private:
   vk::Extent2D                         swapChainExtent;
   std::vector<vk::raii::ImageView>     swapChainImageViews;
 
-  vk::raii::PipelineLayout             pipelineLayout   = nullptr;
-  vk::raii::Pipeline                   graphicsPipeline = nullptr;
+  vk::raii::DescriptorSetLayout        descriptorSetLayout = nullptr;
+  vk::raii::PipelineLayout             pipelineLayout      = nullptr;
+  vk::raii::Pipeline                   graphicsPipeline    = nullptr;
 
   vk::raii::Buffer                     vertexBuffer       = nullptr;
   vk::raii::DeviceMemory               vertexBufferMemory = nullptr;
   vk::raii::Buffer                     indexBuffer        = nullptr;
   vk::raii::DeviceMemory               indexBufferMemory  = nullptr;
+
+  std::vector<vk::raii::Buffer>        uniformBuffers;
+  std::vector<vk::raii::DeviceMemory>  uniformBuffersMemory;
+  std::vector<void *>                  uniformBuffersMapped;
+
+  vk::raii::DescriptorPool             descriptorPool = nullptr;
+  std::vector<vk::raii::DescriptorSet> descriptorSets;
 
   vk::raii::CommandPool                commandPool      = nullptr;
   std::vector<vk::raii::CommandBuffer> commandBuffers;
@@ -128,12 +143,16 @@ private:
   void createLogicalDevice();
   void createSwapChain();
   void createImageViews();
+  void createDescriptorSetLayout();
   void createGraphicsPipeline();
   void createCommandPool();
   std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
   void copyBuffer(vk::raii::Buffer & srcBuffer, vk::raii::Buffer & dstBuffer, vk::DeviceSize size);
   void createVertexBuffer();
   void createIndexBuffer();
+  void createUniformBuffers();
+  void createDescriptorPool();
+  void createDescriptorSets();
   uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
   void createCommandBuffers();
 
@@ -149,6 +168,7 @@ private:
   );
 
   void createSyncObjects();
+  void updateUniformBuffer(uint32_t currentImage);
   void drawFrame();
 
   [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const {
