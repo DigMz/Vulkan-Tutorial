@@ -99,7 +99,7 @@ void Application::createInstance() {
         });
     });
   if (unsupportedLayerIt != requiredLayers.end()) {
-    throw std::runtime_error("Required layer not supported: " + std::string("*unsupportedLayerIt"));
+    throw std::runtime_error("Required layer not supported: " + std::string(*unsupportedLayerIt));
   }
 
   // Get the required extensions
@@ -153,9 +153,25 @@ void Application::pickPhysicalDevice() {
     // std::cout << deviceProperties.deviceName << std::endl;
     uint32_t score = 0;
 
-    // Discrete GPUs have a significant performance advantage
-    if (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
-      score += 1000;
+    switch (deviceProperties.deviceType) {
+      // Discrete GPUs have a significant performance advantage
+      case vk::PhysicalDeviceType::eDiscreteGpu:
+        score += 1000;
+        break;
+      // Integrated GPUs are better than Virtaul ones
+      case vk::PhysicalDeviceType::eIntegratedGpu:
+        score += 100;
+        break;
+      // Better than nothing
+      case vk::PhysicalDeviceType::eVirtualGpu:
+        score += 10;
+        break;
+      // Nothing
+      case vk::PhysicalDeviceType::eCpu:
+        score += 1;
+        break;
+      default:
+        break;
     }
 
     // Maximum possible size of texture affects graphics quality
