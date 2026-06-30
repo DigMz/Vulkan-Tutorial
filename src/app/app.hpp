@@ -17,6 +17,8 @@
 import vulkan.hpp;
 #endif
 #include <GLFW/glfw3.h>
+#define STD_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 const uint32_t WIDTH  = 800;
 const uint32_t HEIGHT = 600;
@@ -93,6 +95,11 @@ private:
   vk::raii::PipelineLayout             pipelineLayout      = nullptr;
   vk::raii::Pipeline                   graphicsPipeline    = nullptr;
 
+  vk::raii::Image                      textureImage       = nullptr;
+  vk::raii::DeviceMemory               textureImageMemory = nullptr;
+  vk::raii::ImageView                  textureImageView   = nullptr;
+  vk::raii::Sampler                    textureSampler     = nullptr;
+
   vk::raii::Buffer                     vertexBuffer       = nullptr;
   vk::raii::DeviceMemory               vertexBufferMemory = nullptr;
   vk::raii::Buffer                     indexBuffer        = nullptr;
@@ -146,7 +153,15 @@ private:
   void createDescriptorSetLayout();
   void createGraphicsPipeline();
   void createCommandPool();
+  void createTextureImage();
+  std::pair<vk::raii::Image, vk::raii::DeviceMemory> createImage(
+    uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties
+  );
+  void transitionImageLayout(vk::raii::CommandBuffer &commandBuffer, const vk::raii::Image &image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+  void copyBufferToImage(vk::raii::CommandBuffer &commandBuffer, const vk::raii::Buffer &buffer, vk::raii::Image &image, uint32_t width, uint32_t height);
   std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+  vk::raii::CommandBuffer beginSingleTimeCommands();
+  void endSingleTimeCommands(vk::raii::CommandBuffer &&commandBuffer);
   void copyBuffer(vk::raii::Buffer & srcBuffer, vk::raii::Buffer & dstBuffer, vk::DeviceSize size);
   void createVertexBuffer();
   void createIndexBuffer();
