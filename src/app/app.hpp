@@ -154,9 +154,12 @@ private:
   void createGraphicsPipeline();
   void createCommandPool();
   void createTextureImage();
+  void createTextureImageView();
+  void createTextureSampler();
   std::pair<vk::raii::Image, vk::raii::DeviceMemory> createImage(
     uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties
   );
+  vk::raii::ImageView createImageView(vk::Image const &image, vk::Format format);
   void transitionImageLayout(vk::raii::CommandBuffer &commandBuffer, const vk::raii::Image &image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
   void copyBufferToImage(vk::raii::CommandBuffer &commandBuffer, const vk::raii::Buffer &buffer, vk::raii::Image &image, uint32_t width, uint32_t height);
   std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
