@@ -321,15 +321,25 @@ void Application::createImageViews() {
 }
 
 void Application::createDescriptorSetLayout() {
-  vk::DescriptorSetLayoutBinding uboLayoutBinding {
-    .binding         = 0,
-    .descriptorType  = vk::DescriptorType::eUniformBuffer,
-    .descriptorCount = 1,
-    .stageFlags      = vk::ShaderStageFlagBits::eVertex
+  std::array<vk::DescriptorSetLayoutBinding, 2> bindings {
+    {
+      {
+        .binding = 0,
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = 1,
+        .stageFlags = vk::ShaderStageFlagBits::eVertex
+      },
+      {
+        .binding = 1,
+        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        .descriptorCount = 1,
+        .stageFlags = vk::ShaderStageFlagBits::eFragment
+      }
+    }
   };
   vk::DescriptorSetLayoutCreateInfo layoutInfo {
-    .bindingCount = 1,
-    .pBindings    = &uboLayoutBinding
+    .bindingCount = static_cast<uint32_t>(bindings.size()),
+    .pBindings    = bindings.data()
   };
   descriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
 }
@@ -656,15 +666,23 @@ void Application::createUniformBuffers() {
 }
 
 void Application::createDescriptorPool() {
-  vk::DescriptorPoolSize poolSize {
-    .type            = vk::DescriptorType::eUniformBuffer,
-    .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+  std::array<vk::DescriptorPoolSize, 2> poolSize {
+    {
+      {
+        .type            = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+      },
+      {
+        .type            = vk::DescriptorType::eCombinedImageSampler,
+        .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+      }
+    }
   };
   vk::DescriptorPoolCreateInfo poolInfo {
     .flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
     .maxSets       = MAX_FRAMES_IN_FLIGHT,
-    .poolSizeCount = 1,
-    .pPoolSizes    = &poolSize
+    .poolSizeCount = static_cast<uint32_t>(poolSize.size()),
+    .pPoolSizes    = poolSize.data()
   };
 
   descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
@@ -686,15 +704,30 @@ void Application::createDescriptorSets() {
       .offset = 0,
       .range  = sizeof(UniformBufferObject)
     };
-    vk::WriteDescriptorSet descriptorWrite {
+    vk::DescriptorImageInfo imageInfo {
+      .sampler = textureSampler,
+      .imageView = textureImageView,
+      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+    };
+    std::array<vk::WriteDescriptorSet, 2> descriptorWrites {{
+      {
       .dstSet          = descriptorSets[i],
       .dstBinding      = 0,
       .dstArrayElement = 0,
       .descriptorCount = 1,
       .descriptorType  = vk::DescriptorType::eUniformBuffer,
       .pBufferInfo     = &bufferInfo
-    };
-    device.updateDescriptorSets(descriptorWrite, {});
+      },
+      {
+      .dstSet          = descriptorSets[i],
+      .dstBinding      = 1,
+      .dstArrayElement = 0,
+      .descriptorCount = 1,
+      .descriptorType  = vk::DescriptorType::eCombinedImageSampler,
+      .pImageInfo      = &imageInfo
+      }
+    }};
+    device.updateDescriptorSets(descriptorWrites, {});
   }
 }
 
