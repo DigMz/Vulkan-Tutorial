@@ -8,6 +8,7 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 
+
 #include <cstdint>
 #include <vector>
 #include <vulkan/vk_platform.h>
@@ -20,9 +21,13 @@ import vulkan.hpp;
 #include <GLFW/glfw3.h>
 #define STD_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 
 const uint32_t WIDTH  = 800;
 const uint32_t HEIGHT = 600;
+const std::string MODEL_PATH = "assets/models/viking_room.obj";
+const std::string TEXTURE_PATH = "assets/textures/viking_room.png";
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<char const*> validationLayers = {
@@ -53,6 +58,17 @@ struct Vertex {
 		         {.location = 1, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, color)},
 		         {.location = 2, .binding = 0, .format = vk::Format::eR32G32Sfloat, .offset = offsetof(Vertex, texCoord)}}};
 	}
+
+  bool operator==(const Vertex& other) const {
+    return pos == other.pos && color == other.color && texCoord == other.texCoord; 
+  }
+};
+
+template<>
+struct std::hash<Vertex> {
+  size_t operator()(Vertex const& vertex) const noexcept {
+    return ((std::hash<glm::vec3>()(vertex.pos) ^ (std::hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (std::hash<glm::vec2>()(vertex.texCoord) << 1);
+  }
 };
 
 struct UniformBufferObject {
@@ -61,22 +77,6 @@ struct UniformBufferObject {
   alignas(16) glm::mat4 proj;
 };
 
-const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f}},
-    {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 2.0f}},
-    {{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {2.0f, 2.0f}},
-
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f}},
-    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 2.0f}},
-    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {2.0f, 2.0f}},
-};
-
-const std::vector<uint16_t> indices = {
-  0, 1, 2, 2, 3, 0,
-  4, 5, 6, 6, 7, 4
-};
 
 class Application
 {
@@ -112,6 +112,8 @@ private:
   vk::raii::ImageView                  textureImageView   = nullptr;
   vk::raii::Sampler                    textureSampler     = nullptr;
 
+  std::vector<Vertex> vertices;
+  std::vector<uint32_t> indices;
   vk::raii::Buffer                     vertexBuffer       = nullptr;
   vk::raii::DeviceMemory               vertexBufferMemory = nullptr;
   vk::raii::Buffer                     indexBuffer        = nullptr;
@@ -181,6 +183,7 @@ private:
   vk::raii::CommandBuffer beginSingleTimeCommands();
   void endSingleTimeCommands(vk::raii::CommandBuffer &&commandBuffer);
   void copyBuffer(vk::raii::Buffer & srcBuffer, vk::raii::Buffer & dstBuffer, vk::DeviceSize size);
+  void loadModel();
   void createVertexBuffer();
   void createIndexBuffer();
   void createUniformBuffers();

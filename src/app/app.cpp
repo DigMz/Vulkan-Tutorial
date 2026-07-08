@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <unordered_map>
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -19,8 +20,12 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_raii.hpp>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 void Application::run() {
   std::cout << (enableValidationLayers ? "validationLayers enabled" : "validationLayers off") << std::endl;
@@ -69,6 +74,7 @@ void Application::initVulkan() {
   createTextureImage();
   createTextureImageView();
   createTextureSampler();
+  loadModel();
   createVertexBuffer();
   createIndexBuffer();
   createUniformBuffers();
@@ -495,7 +501,7 @@ vk::Format Application::findDepthFormat() {
 
 void Application::createTextureImage() {
   int texWidth, texHeight, texChannels;
-  stbi_uc *pixels = stbi_load("assets/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  stbi_uc *pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
   if (!pixels) {
@@ -662,6 +668,55 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> Application::createBuffer(vk
   vk::raii::DeviceMemory bufferMemory = vk::raii::DeviceMemory(device, memoryAllocateInfo);
   buffer.bindMemory(*bufferMemory, 0);
   return {std::move(buffer), std::move(bufferMemory)};
+}
+
+void Application::loadModel() {
+  tinyobj::attrib_t                attrib;
+  std::vector<tinyobj::shape_t>    shapes;
+  std::vector<tinyobj::material_t> materials;
+  std::string                      warn, err;
+
+  if (
+    !tinyobj::LoadObj(
+      &attrib,
+      &shapes,
+      &materials,
+      &warn,
+      &err,
+      MODEL_PATH.c_str()
+    )
+  ) {
+		throw std::runtime_error(warn + err);
+	}
+
+  std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+  for (const auto& shape : shapes) {
+    for (const auto& index: shape.mesh.indices) {
+      Vertex vertex{};
+
+      vertex.pos = {
+        attrib.vertices[3 * index.vertex_index + 0],
+        attrib.vertices[3 * index.vertex_index + 1],
+        attrib.vertices[3 * index.vertex_index + 2]
+      };
+
+      vertex.texCoord = {
+        attrib.texcoords[2 * index.texcoord_index + 0],
+        1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+      };
+
+      vertex.color = {1.0f, 1.0f, 1.0f};
+
+      auto [it, inserted] = uniqueVertices.insert({vertex, static_cast<uint32_t>(vertices.size())});
+      if (inserted) {
+        vertices.push_back(vertex);
+      }
+      indices.push_back(it->second);
+    }
+  }
+
+  std::cout << "Vertex Count: " << vertices.size() << std::endl;
 }
 
 void Application::createVertexBuffer() {
@@ -896,7 +951,7 @@ void Application::recordCommandBuffer(uint32_t imageIndex) {
   commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
   commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
   commandBuffer.bindVertexBuffers(0, *vertexBuffer, {0});
-  commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
+  commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexTypeValue<decltype(indices)::value_type>::value);
 
   commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSets[frameIndex], nullptr);
   commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
