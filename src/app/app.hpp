@@ -36,7 +36,7 @@ constexpr bool enableValidationLayers = true;
 #endif // NDEBUG
 
 struct Vertex {
-  glm::vec2 pos;
+  glm::vec3 pos;
   glm::vec3 color;
   glm::vec2 texCoord;
 
@@ -49,7 +49,7 @@ struct Vertex {
   }
 
   static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
-		return {{{.location = 0, .binding = 0, .format = vk::Format::eR32G32Sfloat, .offset = offsetof(Vertex, pos)},
+		return {{{.location = 0, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, pos)},
 		         {.location = 1, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, color)},
 		         {.location = 2, .binding = 0, .format = vk::Format::eR32G32Sfloat, .offset = offsetof(Vertex, texCoord)}}};
 	}
@@ -62,14 +62,20 @@ struct UniformBufferObject {
 };
 
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f}},
-    {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 2.0f}},
-    {{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {2.0f, 2.0f}}
+    {{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f}},
+    {{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 2.0f}},
+    {{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {2.0f, 2.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f}},
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 2.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {2.0f, 2.0f}},
 };
 
 const std::vector<uint16_t> indices = {
-  0, 1, 2, 2, 3, 0
+  0, 1, 2, 2, 3, 0,
+  4, 5, 6, 6, 7, 4
 };
 
 class Application
@@ -96,6 +102,10 @@ private:
   vk::raii::DescriptorSetLayout        descriptorSetLayout = nullptr;
   vk::raii::PipelineLayout             pipelineLayout      = nullptr;
   vk::raii::Pipeline                   graphicsPipeline    = nullptr;
+
+  vk::raii::Image                      depthImage         = nullptr;
+  vk::raii::DeviceMemory               depthImageMemory   = nullptr;
+  vk::raii::ImageView                  depthImageView     = nullptr;
 
   vk::raii::Image                      textureImage       = nullptr;
   vk::raii::DeviceMemory               textureImageMemory = nullptr;
@@ -155,13 +165,16 @@ private:
   void createDescriptorSetLayout();
   void createGraphicsPipeline();
   void createCommandPool();
+  void createDepthResources();
+  vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+  vk::Format findDepthFormat();
   void createTextureImage();
   void createTextureImageView();
   void createTextureSampler();
   std::pair<vk::raii::Image, vk::raii::DeviceMemory> createImage(
     uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties
   );
-  vk::raii::ImageView createImageView(vk::Image const &image, vk::Format format);
+  vk::raii::ImageView createImageView(vk::Image const &image, vk::Format format, vk::ImageAspectFlags aspectFlags);
   void transitionImageLayout(vk::raii::CommandBuffer &commandBuffer, const vk::raii::Image &image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
   void copyBufferToImage(vk::raii::CommandBuffer &commandBuffer, const vk::raii::Buffer &buffer, vk::raii::Image &image, uint32_t width, uint32_t height);
   std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
@@ -178,13 +191,14 @@ private:
 
   void recordCommandBuffer(uint32_t imageIndex);
   void transition_image_layout(
-    uint32_t                imageIndex,
+    vk::Image               image,
     vk::ImageLayout         old_layout,
     vk::ImageLayout         new_layout,
     vk::AccessFlags2        src_access_mask,
     vk::AccessFlags2        dst_access_mask,
     vk::PipelineStageFlags2 src_stage_mask,
-    vk::PipelineStageFlags2 dst_stage_mask
+    vk::PipelineStageFlags2 dst_stage_mask,
+    vk::ImageAspectFlags    image_aspect_flags
   );
 
   void createSyncObjects();
