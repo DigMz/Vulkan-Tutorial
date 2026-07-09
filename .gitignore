@@ -1,7 +1,6 @@
 build/
 .direnv/
 .cache/
-.clangd
 .envrc
 flake.lock
 compile_commands.json
