@@ -1,28 +1,35 @@
 #pragma once
 
-#include "vulkan/vulkan.hpp"
 #include <array>
-#include <cstddef>
-#include <glm/ext/vector_float2.hpp>
+#include <assert.h>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#include <glm/glm.hpp>
-
-
-#include <cstdint>
 #include <vector>
-#include <vulkan/vk_platform.h>
-#include <vulkan/vulkan.hpp>
+
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #	include <vulkan/vulkan_raii.hpp>
 #else
 import vulkan.hpp;
 #endif
+
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#define STD_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
+
+#ifdef APP_HPP_IMPLEMENTATION
+  #define STB_IMAGE_IMPLEMENTATION
+  #define TINYOBJLOADER_IMPLEMENTATION
+#endif
+
+#include <stb_image.h>
+#include <tiny_obj_loader.h>
 
 const uint32_t WIDTH  = 800;
 const uint32_t HEIGHT = 600;

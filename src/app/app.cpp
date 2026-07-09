@@ -1,31 +1,12 @@
+#define APP_HPP_IMPLEMENTATION
 #include "app.hpp"
-#include "vulkan/vulkan.hpp"
+
 #include "utils/utils.hpp"
-#include <GLFW/glfw3.h>
-#include <cassert>
-#include <chrono>
-#include <cstddef>
-#include <cstring>
-#include <unordered_map>
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/ext/vector_float3.hpp>
-#include <limits>
-#include <map>
+
 #include <algorithm>
-#include <cstdint>
+#include <chrono>
+#include <limits>
 #include <stdexcept>
-#include <tuple>
-#include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan_raii.hpp>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
 
 void Application::run() {
   std::cout << (enableValidationLayers ? "validationLayers enabled" : "validationLayers off") << std::endl;
